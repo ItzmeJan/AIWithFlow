@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="960" height="320" role="img" aria-label="AIWithFlow pipeline: a chat share link is scraped, summarized into a handoff brief, then offered as prefill deeplinks or a copy-and-paste payload.">
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --fill: #f6f8fa; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #30363d; --accent: #6ea8fe; --fill: #161b22; }
+    }
+    .bg { fill: var(--bg); }
+    .box { fill: var(--fill); stroke: var(--line); stroke-width: 1.5; }
+    .accent { stroke: var(--accent); stroke-width: 1.5; }
+    .t { fill: var(--fg); font: 600 15px system-ui, -apple-system, Segoe UI, sans-serif; }
+    .s { fill: var(--muted); font: 12px system-ui, -apple-system, Segoe UI, sans-serif; }
+    .l { fill: var(--muted); font: 11px system-ui, -apple-system, Segoe UI, sans-serif; }
+    .flow { stroke: var(--muted); stroke-width: 1.5; fill: none; marker-end: url(#a); }
+    .num { fill: var(--accent); font: 600 11px system-ui, sans-serif; }
+  </style>
+
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="960" height="320" rx="12"/>
+
+  <!-- 1. input -->
+  <rect class="box" x="30" y="40" width="180" height="80" rx="10"/>
+  <text class="t" x="120" y="74" text-anchor="middle">Share link</text>
+  <text class="s" x="120" y="95" text-anchor="middle">chatgpt.com/share/…</text>
+
+  <!-- 2. scrape -->
+  <rect class="box" x="270" y="40" width="180" height="80" rx="10"/>
+  <text class="t" x="360" y="70" text-anchor="middle">Scrape</text>
+  <text class="s" x="360" y="90" text-anchor="middle">Claude snapshot API</text>
+  <text class="s" x="360" y="106" text-anchor="middle">ChatGPT rendered DOM</text>
+
+  <!-- 3. summarize -->
+  <rect class="box" x="510" y="40" width="180" height="80" rx="10"/>
+  <text class="t" x="600" y="70" text-anchor="middle">Summarize</text>
+  <text class="s" x="600" y="90" text-anchor="middle">Ollama → handoff brief</text>
+  <text class="s" x="600" y="106" text-anchor="middle">goal · decisions · next</text>
+
+  <!-- 4. options -->
+  <rect class="box accent" x="750" y="40" width="180" height="80" rx="10"/>
+  <text class="t" x="840" y="70" text-anchor="middle">Options</text>
+  <text class="s" x="840" y="90" text-anchor="middle">one flat list</text>
+  <text class="s" x="840" y="106" text-anchor="middle">the UI renders in order</text>
+
+  <line class="flow" x1="212" y1="80" x2="266" y2="80"/>
+  <line class="flow" x1="452" y1="80" x2="506" y2="80"/>
+  <line class="flow" x1="692" y1="80" x2="746" y2="80"/>
+
+  <!-- fork -->
+  <path class="flow" d="M 840 124 C 840 158, 622 154, 622 192"/>
+  <path class="flow" d="M 840 124 C 840 158, 842 154, 842 192"/>
+
+  <!-- 5. deeplinks -->
+  <rect class="box" x="515" y="196" width="215" height="76" rx="10"/>
+  <text class="t" x="622" y="226" text-anchor="middle">Prefill deeplinks</text>
+  <text class="s" x="622" y="246" text-anchor="middle">Claude · ChatGPT · Perplexity</text>
+  <text class="s" x="622" y="262" text-anchor="middle">Grok · Google AI Mode</text>
+
+  <!-- 6. copy paste -->
+  <rect class="box" x="755" y="196" width="175" height="76" rx="10"/>
+  <text class="t" x="842" y="226" text-anchor="middle">Copy &amp; paste</text>
+  <text class="s" x="842" y="246" text-anchor="middle">Gemini · Copilot</text>
+  <text class="s" x="842" y="262" text-anchor="middle">DeepSeek · Le Chat</text>
+
+  <text class="l" x="30" y="226">Always public links only.</text>
+  <text class="l" x="30" y="246">No cookies, no logins, no auto-send.</text>
+  <text class="l" x="30" y="266">Every button still needs a human press.</text>
+</svg>

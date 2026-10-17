@@ -9,6 +9,7 @@ type ProviderConfig = {
 }
 
 const config: ProviderConfig = await Bun.file(new URL('./api.json', import.meta.url)).json()
+const SITE_DIR = new URL('./site/', import.meta.url)
 
 const ollama = new Ollama({
   host: 'https://ollama.com',

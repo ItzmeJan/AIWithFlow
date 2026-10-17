@@ -9,4 +9,5 @@ const response = await ollama.chat({
   model: 'gemma4',
   messages: [{role: 'user', content: 'Hello!'}],
 })
+
 console.log(response.message.content)

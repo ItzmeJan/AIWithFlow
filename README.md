@@ -13,10 +13,10 @@ You hit the limit  ──▶  Paste the chat share link  ──▶  Get a summar
                                           ┌───────────────────┴───────────────────┐
                                           ▼                                       ▼
                         Open in ChatGPT / Claude / Grok /          Other: copy the brief, open
-                        Google AI Mode with the prompt             any app, paste it in
+                        Google AI Mode with the prompt              any app, paste it in
                         already filled in
-                                          │                                       │
-                                          └───────────────────┬───────────────────┘
+                                            │                                       │
+                                            └───────────────────┬───────────────────┘
                                                               ▼
                                           ...and keep chatting without losing context
 ```
@@ -118,8 +118,8 @@ For every submitted link, AIWithFlow returns:
                                           ┌─────────────────┴─────────────────┐
                                           ▼                                   ▼
                                  ┌───────────────────┐              ┌───────────────────┐
-                                 │ Deeplink builder  │              │ Packets store/cache│
-                                 │ per-provider URLs │              │ (optional sharing) │
+                                 │ Handoff options   │              │ Packets store/cache│
+                                 │ deeplinks + Other │              │ (optional sharing) │
                                  └───────────────────┘              └───────────────────┘
 ```
 
@@ -129,8 +129,10 @@ For every submitted link, AIWithFlow returns:
    chrome, buttons, "regenerate" text, timestamps and other noise.
 4. **Summarize** — send the transcript to an LLM with a handoff-specific prompt that
    produces a *portable* brief rather than a generic recap.
-5. **Build links** — turn the brief into provider-specific URLs.
-6. **Return** — summary text, deep links, copy-paste blob, and the normalized transcript.
+5. **Build options** — for prefill-capable providers, provider-specific URLs; for
+   everything else, the Other option (clipboard payload + plain `Open` link).
+6. **Return** — summary, per-provider options, copy payloads, and the normalized
+   transcript.
 
 ## Current status
 
@@ -223,12 +225,16 @@ src/
 ├── normalize.ts           # clean transcript -> [{role, content}]
 ├── summarize.ts           # transcript -> handoff packet (LLM call)
 ├── deeplink.ts            # packet -> per-provider URLs (capability map + verified dates)
+├── handoff.ts             # packet -> each option: deeplink OR Other (copy payload + open URL)
+├── clipboard.ts           # plain-text + Markdown payloads, copy/download helpers
 ├── server.ts              # HTTP API (Bun.serve)
 └── cache.ts               # in-memory + optional persistent cache
 ```
 
 Every provider definition implements the same shape, so the pipeline never needs to
-know which site it is dealing with:
+know which site it is dealing with. A provider with no prefill parameter is a normal
+provider that happens to return `null` from `buildDeeplink` — it is then served by the
+Other option instead of being dropped:
 
 ```ts
 type Provider = {
@@ -237,7 +243,10 @@ type Provider = {
   matches: (url: URL) => boolean
   fetchTranscript: (url: URL) => Promise<RawTranscript>
   parse: (raw: RawTranscript) => Message[]
-  buildDeeplink: (prompt: string) => string | null  // null when no prefill support
+  buildDeeplink: (prompt: string) => string | null  // null => route to the Other option
+  openUrl: string                                   // plain app URL, never carries a prompt
+  hints?: string                                    // e.g. "brief first, then your question"
+  verified?: { date: string, note: string }         // when prefill was last checked
 }
 ```
 
@@ -356,7 +365,7 @@ property, not an implementation detail:
   instruction.
 
 AIWithFlow ships **only** the first kind. If a provider auto-submits, the button is
-withdrawn and replaced by the copy-prompt fallback. This is not paranoia — see
+withdrawn and replaced by the **Other / Copy & paste** option. This is not paranoia — see
 [Reprompt](#reprompt-a-url-parameter-became-a-command-channel) below.
 
 ### Verified capability map
@@ -371,9 +380,9 @@ withdrawn and replaced by the copy-prompt fallback. This is not paranoia — see
 | **Grok** | `https://grok.com/?q=<enc>` · on X: `https://x.com/i/grok?text=<enc>` | `q` / `text` | Prefills. Note the parameter name differs per surface | ✅ works — both forms in active use |
 | **Google AI Mode** | `https://www.google.com/search?udm=50&aep=11&q=<enc>` | `q` | Prefills the AI Mode answer surface | ✅ works |
 | **Google AI Studio** | `https://aistudio.google.com/prompts/new_chat?prompt=<enc>` | `prompt` | Prefill support was rolled out around Nov 2025 | ⚠️ reported — verify the param before shipping |
-| **Gemini app** | — | **none** | `gemini.google.com` has **no** native prefill. `?q=` / `?prompt=` redirect to an empty chat. Community extensions exist precisely because the site doesn't support it | ❌ unsupported — use Google AI Mode or AI Studio instead |
-| **Microsoft Copilot** | `https://copilot.microsoft.com/?q=<enc>` | `q` | **Broken since late 2025**: `?q=` loads the page but no longer populates the chat box. Historically it not only prefilled but auto-submitted | ❌ regression — reported Nov 2025, still open Feb/Mar 2026 |
-| **DeepSeek, Qwen, Kimi, Z.ai, Le Chat / Mistral Vibe** | — | none known | No stable documented prefill parameter found | ❌ copy-prompt only |
+| **Gemini app** | — | **none** | `gemini.google.com` has **no** native prefill. `?q=` / `?prompt=` redirect to an empty chat. Community extensions exist precisely because the site doesn't support it | ❌ unsupported — use Google AI Mode, or the **Other** option in the app itself |
+| **Microsoft Copilot** | `https://copilot.microsoft.com/?q=<enc>` | `q` | **Broken since late 2025**: `?q=` loads the page but no longer populates the chat box. Historically it not only prefilled but auto-submitted | ❌ regression — routed to the **Other** option; re-verify before restoring a button |
+| **DeepSeek, Qwen, Kimi, Z.ai, Le Chat / Mistral Vibe** | — | none known | No stable documented prefill parameter found | ❌ no prefill found — served by the **Other** option |
 
 Two entries in that table carry a lesson:
 
@@ -384,12 +393,67 @@ Two entries in that table carry a lesson:
   parameter that once auto-executed prompts is now a dead parameter. Any capability map
   without a "last verified" column will mislead users for months.
 
+### Other: copy, open, paste
+
+The product rule is **never a dead end**. Every provider without a prefill parameter —
+the Gemini app, Copilot as it stands today, DeepSeek, Qwen, Kimi, Z.ai, Le Chat /
+Mistral Vibe, a desktop app with no URL bar, a local model, or whichever provider breaks
+next month — is served by one shared option rather than being excluded.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Other / Copy & paste                                            │
+│                                                                  │
+│  [ Copy brief ]   ✓ copied — 1,140 characters                    │
+│                                                                  │
+│  Then open the app and paste it as your first message:            │
+│    Gemini ↗   Copilot ↗   DeepSeek ↗   Qwen ↗   Le Chat ↗        │
+│                                                                  │
+│  [ Copy as Markdown ]   [ Download .md ]                          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Three steps, no magic:
+
+1. **Copy** puts the prepared prompt on the clipboard, formatted for a plain-text input.
+2. **Open** is a plain link to the provider with **no prompt attached**, so there is
+   nothing to fail or be misread — it just puts the user where they need to be.
+3. **Paste** as the first message in the new chat.
+
+Design rules for this option:
+
+- **It is the guaranteed path, not a downgrade.** Deeplinks are an accelerator; copy &
+  paste is what makes the product work with every app that exists and every one that
+  doesn't yet. It is also the only path that keeps working when a provider changes a
+  parameter, and the natural path for local models.
+- **Copy is a first-class action, not a hidden fallback.** A real button, a success
+  confirmation, and the character count so the user can see what they're about to paste.
+  Clipboard writes fail silently on some browsers and non-secure origins: detect the
+  failure, report it, and fall back to a selectable `<textarea>` containing the prompt.
+- **Two formats, one payload.** Plain text for chat inputs; Markdown for apps that render
+  it. Identical content, different wrapping.
+- **Offer a file too.** `Download .md` / `.txt` covers pasting on another device, and
+  keeping the brief as an artifact.
+- **Provider hints are data, not branches.** A note like "Gemini prefers the brief first,
+  then your question" lives on the provider record; the pipeline never grows a special
+  case for it.
+- **Never attach the prompt to an `Open` link for these providers.** If an app ignores
+  query strings today it may half-support them tomorrow, and a link that *sometimes*
+  carries a prompt is exactly the silent failure this option exists to prevent.
+- **It is also the safest option.** Nothing about the handoff travels through a URL, so
+  there is no prefill-injection surface and nothing for a third party to intercept or
+  rewrite. When in doubt — or when a provider's behavior is unclear — route here.
+
+In the registry, `buildDeeplink` returning `null` is not an error — it is a routing
+decision. The provider automatically gets the Other option with its `openUrl` and its
+formatting hints.
+
 ### Design rules that follow
 
 - **Prefer prefill-and-wait, always.** Ranking providers by whether a stranger's link
   can start a turn is the right criterion — not brand or market share.
-- **Always ship the copy-prompt fallback.** A deeplink is a convenience; the clipboard
-  is the guarantee. Never render a button that silently does nothing.
+- **Always ship the Other option.** A deeplink is a convenience; copy & paste is the
+  guarantee. Never render a button — deeplink or otherwise — that can silently do nothing.
 - **Store a `verified` date and a `verifiedBy` note per entry**, surface unverified
   links as unverified in the UI, and re-check after every provider change.
 - **Encode exactly once.** Zero encodes truncates the prompt at the first `&`; two
@@ -416,14 +480,25 @@ POST /api/handoff
        summary: string,
        packet: HandoffPacket,
        transcript: Message[],
-       links: [{ provider, url, supportsPrefill }],
-       copyPrompt: string
+       options: [
+         // prefill-capable providers
+         { provider, name, mode: "deeplink", url, supportsPrefill: true, verified },
+         // no-prefill providers — the Other option
+         { provider, name, mode: "other",    openUrl, hints, supportsPrefill: false }
+       ],
+       copyPrompt: string,           // plain text, for the Other option
+       copyPromptMarkdown: string    // Markdown variant of the same payload
      }
 
-GET  /api/providers            -> capability map + verification status
+GET  /api/providers            -> capability map: mode, openUrl, hints, verified date
 GET  /api/packets/:id          -> cached packet (when sharing is enabled)
 GET  /healthz                  -> liveness
 ```
+
+`options` is the single list the UI renders, in order. Every entry is either a
+`deeplink` (prompt travels in the URL) or `other` (prompt travels via the clipboard); the
+client never has to decide which, and a provider flipping between the two is a server-side
+config change rather than a UI rewrite.
 
 Errors are explicit: `UNSUPPORTED_PROVIDER`, `PRIVATE_THREAD`, `FETCH_FAILED`,
 `PARSE_FAILED`, `MODEL_FAILED`, `PAYLOAD_TOO_LARGE`.
@@ -543,11 +618,15 @@ What follows for the implementation:
 - [ ] **M1 — Parser.** Real `scrape()` for one provider, with fixtures and unit tests.
 - [ ] **M2 — Handoff packet.** `summarize.ts` with the schema above, validated by a
       runtime schema check; golden-file tests on canned transcripts.
-- [ ] **M3 — Deeplinks.** `deeplink.ts` + capability map + clipboard fallback.
+- [ ] **M3 — Handoff options.** `deeplink.ts` + capability map with per-entry verified
+      dates, plus the **Other** option: text and Markdown clipboard payloads, `openUrl`
+      links for no-prefill providers, and `.md` download.
 - [ ] **M4 — HTTP API.** `Bun.serve` server implementing `/api/handoff`.
-- [ ] **M5 — Web UI.** Paste box, streaming summary, provider buttons, copy button.
+- [ ] **M5 — Web UI.** Paste box, streaming summary, per-provider buttons, and the
+      Other / Copy & paste panel with copy confirmation and a textarea fallback.
 - [ ] **M6 — Multi-provider.** Claude, Perplexity, Grok, Google AI Mode; the Gemini app
-      itself has no prefill parameter, so AI Mode / AI Studio is the Gemini-shaped target.
+      itself has no prefill parameter, so AI Mode / AI Studio is the Gemini-shaped target,
+      and any provider without prefill routes to **Other** automatically.
       Browser-render fallback for JS-heavy share pages.
 - [ ] **M7 — Local-only mode.** Paste transcript, no fetching, nothing leaves the
       machine beyond the model call.
@@ -612,8 +691,17 @@ Copying gives the next model raw noise and blows the context budget. The packet 
 dense, structured, and tuned for continuation — and it arrives with one click.
 
 **What if the provider has no deeplink support?**
-The Copy-prompt fallback covers 100% of providers. Deeplinks are an accelerator, not a
-dependency.
+It gets the **Other / Copy & paste** option: the brief goes on the clipboard, an `Open`
+link takes you to the app, and you paste it as the first message. That covers 100% of
+providers — including desktop apps with no URL bar and local models. Deeplinks are an
+accelerator, not a dependency.
+
+**Why not just put the prompt in the URL for those apps too?**
+Because a link that sometimes carries a prompt is worse than no link at all. An app that
+ignores query strings today may half-honour them tomorrow, and the user has no way to tell
+whether the message they're about to send is the one they wrote. `Open` links for
+no-prefill providers carry nothing; the prompt always travels via the clipboard, where the
+user can see it.
 
 **Does it log into my account?**
 No. Public share links only. No cookies, no credentials, no private threads.

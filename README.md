@@ -141,11 +141,18 @@ For every submitted link, AIWithFlow returns:
 
 Implemented today:
 
-- `scrape.ts` — a stub. `scrape(url: string): Promise<string>` returns
-  `'Scraped content'`. The real per-provider fetchers and parsers are not written yet.
+- `scrape.ts` — a router by hostname plus a working Claude fetcher. `claude.ai/share/<uuid>`
+  links are resolved to the structured snapshot API and normalized to
+  `{role, content}[]`; public-only (`is_public`), with `INVALID_URL` /
+  `FETCH_FAILED` / `PRIVATE_THREAD` errors. Other providers throw
+  `UNSUPPORTED_PROVIDER`. Still no web UI, no other providers, no summarizer.
 - `index.ts` — an Ollama connectivity smoke test. It answers `Hello!` with the
   `gemma4` model via `https://ollama.com` using `OLLAMA_API_KEY`.
 - Bun + TypeScript toolchain, strict `jsconfig.json`, MIT license.
+
+Known gap worth naming: the Claude fetch sends `credentials: "include"`, which is at
+odds with the "never use the user's cookies" rule below. Revisit before this goes
+anywhere near a shared instance.
 
 Not implemented yet: the web UI, the HTTP API, the parser registry, the summarizer
 prompt, the deeplink builder, caching, and storage. See the [Roadmap](#roadmap).

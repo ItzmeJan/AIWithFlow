@@ -1,4 +1,4 @@
-await fetch("https://claude.ai/api/chat_snapshots/393de442-591b-4a69-b1d3-7c37e67d97cf?rendering_mode=messages&render_all_tools=true", {
+await fetch("https://chatgpt.com/share/6ad32396-5fd4-83ee-9edd-52731f2ea432", {
     "credentials": "include",
     "headers": {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:158.0) Gecko/20100101 Firefox/158.0",
@@ -10,8 +10,17 @@ await fetch("https://claude.ai/api/chat_snapshots/393de442-591b-4a69-b1d3-7c37e6
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-Site": "none",
         "Sec-Fetch-User": "?1",
-        "Priority": "u=0, i"
+        "Priority": "u=4"
     },
     "method": "GET",
     "mode": "cors"
-})
+}).then((response) => {
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.text();
+}).then((html) => {
+    console.log(html.split('pageTitle')[1]);
+}).catch((error) => {
+    console.error("Error fetching the URL:", error);
+});

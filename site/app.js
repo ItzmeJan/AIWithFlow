@@ -8,8 +8,6 @@ const other = document.getElementById('other')
 const otherBody = document.getElementById('other-body')
 const error = document.getElementById('error')
 
-const COPY_BTN = '<button id="copy" type="button">Copy brief</button>'
-
 form.addEventListener('submit', async (e) => {
   e.preventDefault()
   const url = urlInput.value.trim()

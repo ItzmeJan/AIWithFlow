@@ -37,7 +37,7 @@ You hit the limit  ──▶  Paste the chat share link  ──▶  Get a summar
 - [The handoff packet](#the-handoff-packet)
 - [The summarization prompt](#the-summarization-prompt)
 - [Deep links per provider](#deep-links-per-provider)
-- [Planned API surface](#planned-api-surface)
+- [API surface](#api-surface)
 - [Design decisions](#design-decisions)
 - [Privacy, security and fairness](#privacy-security-and-fairness)
 - [Roadmap](#roadmap)
@@ -136,38 +136,66 @@ For every submitted link, AIWithFlow returns:
 
 ## Current status
 
-> **This project is an early scaffold.** The README describes the product being built,
-> and this section is the honest line between *built* and *planned*.
+> **This project is an early but working prototype.** The README describes the product
+> being built, and this section is the honest line between *built* and *planned*.
 
-Implemented today:
+Working end-to-end today (verified 2026-10-17 against real share links):
 
-- `scrape.ts` — a router by hostname plus a working Claude fetcher. `claude.ai/share/<uuid>`
-  links are resolved to the structured snapshot API and normalized to
-  `{role, content}[]`; public-only (`is_public`), with `INVALID_URL` /
-  `FETCH_FAILED` / `PRIVATE_THREAD` errors. Other providers throw
-  `UNSUPPORTED_PROVIDER`. Still no web UI, no other providers, no summarizer.
-- `index.ts` — an Ollama connectivity smoke test. It answers `Hello!` with the
-  `gemma4` model via `https://ollama.com` using `OLLAMA_API_KEY`.
-- Bun + TypeScript toolchain, strict `jsconfig.json`, MIT license.
+- **`scrape.ts`** — a hostname router. `claude.ai/share/<uuid>` links are resolved through
+  the structured snapshot API (`/api/chat_snapshots/<id>?rendering_mode=messages`) and
+  normalized to `{role, content}[]`; public-only (`is_public`), with `INVALID_URL` /
+  `FETCH_FAILED` / `PRIVATE_THREAD` errors. `chatgpt.com/share/<id>` links are delegated
+  to the browser scraper below. Anything else throws `UNSUPPORTED_PROVIDER: <host>`.
+- **`scrape_browser.ts`** — ChatGPT share pages are client-rendered, so the Next.js RSC
+  payload proved too brittle to parse (it silently dropped user turns). It now drives
+  system Chrome through `puppeteer-core` in headless mode, waits for
+  `[data-message-author-role]` nodes and reads the transcript out of the DOM. Slower
+  (~10s) and it needs Chrome installed, but it returns the real message list.
+- **`api-server.ts`** — a `Bun.serve` app: `POST /api/handoff` scrapes, summarizes via
+  Ollama, and returns the summary, the option list, and the prompt; `GET /api/health` for
+  liveness; everything else is served from `site/`. It loads its provider and endpoint
+  configuration from `api.json`, so the server is not the place to edit links.
+- **`site/`** — the minimal UI (`index.html`, `style.css`, `app.js`, `favicon.svg`).
+  Paste a link, get a one-line summary, five prefill buttons and the
+  **Other / Copy & paste** panel. Responsive down to phone width, no framework, no build
+  step, no analytics.
+- **`api.json`** — the config: endpoint paths, scrapeable sources, prefill deeplinks, and
+  the copy-paste providers.
+- **`index.ts`** — the original Ollama connectivity smoke test (`gemma4` via
+  `https://ollama.com` using `OLLAMA_API_KEY`).
 
-Known gap worth naming: the Claude fetch sends `credentials: "include"`, which is at
-odds with the "never use the user's cookies" rule below. Revisit before this goes
-anywhere near a shared instance.
+Known gaps worth naming:
 
-Not implemented yet: the web UI, the HTTP API, the parser registry, the summarizer
-prompt, the deeplink builder, caching, and storage. See the [Roadmap](#roadmap).
+- The Claude fetch still sends `credentials: "include"`, which is at odds with the
+  "never use the user's cookies" rule below. Revisit before this goes anywhere near a
+  shared instance.
+- The handoff brief is passed to the next provider inside the URL, so very long briefs
+  can hit provider URL-length limits. The copy-paste path is the fallback.
+- No caching, no storage, no rate limiting, no `sources` fallback for hosts other than
+  Claude and ChatGPT.
+- The endpoint currently trusts the submitted URL to pick the scraper; the scraper
+  allow-list is the only thing standing between a request and arbitrary fetches. Keep it
+  that way (see [Privacy, security and fairness](#privacy-security-and-fairness)).
+
+Not implemented yet: a parser registry beyond two hosts, caching, storage, and the
+packet-sharing layer. See the [Roadmap](#roadmap).
 
 ## Repository layout
 
 ```
 AIWithFlow/
-├── index.ts        # Ollama hello-world / model smoke test (entrypoint today)
-├── scrape.ts       # scrape(url) -> transcript text. Stub.
-├── package.json    # Bun project, ESM, deps: ollama
-├── jsconfig.json   # strict TS config for Bun (checkJs, noUncheckedIndexedAccess)
-├── .env            # OLLAMA_API_KEY (gitignored — never commit)
-├── bun.lock        # lockfile
-├── LICENSE         # MIT, © 2026 Jan
+├── api-server.ts      # Bun.serve: /api/handoff, /api/health, static site/
+├── scrape.ts          # scrape(url) -> {role, content}[]. Hostname router.
+├── scrape_browser.ts  # ChatGPT share pages via puppeteer-core + system Chrome
+├── api.json           # provider + deeplink config (single source of truth)
+├── site/              # minimal UI: index.html, style.css, app.js, favicon.svg
+├── index.ts           # Ollama hello-world / model smoke test
+├── test.ts            # scratch fetch script used while developing scrapers
+├── package.json       # Bun project, ESM, deps: ollama, puppeteer-core
+├── jsconfig.json      # strict TS config for Bun (checkJs, noUncheckedIndexedAccess)
+├── .env               # OLLAMA_API_KEY (gitignored — never commit)
+├── bun.lock           # lockfile
+├── LICENSE            # MIT, © 2026 Jan
 └── README.md
 ```
 
@@ -176,7 +204,9 @@ Planned additions are listed in [Architecture](#architecture).
 ## Quickstart
 
 Requires [Bun](https://bun.sh) (the project uses Bun's runtime, test runner and
-bundler; `package.json` is ESM with `"type": "module"`).
+bundler; `package.json` is ESM with `"type": "module"`). The ChatGPT path additionally
+needs a local Chrome or Edge install — `scrape_browser.ts` finds
+`C:\Program Files\Google\Chrome\Application\chrome.exe` and falls back to Edge.
 
 ```bash
 # 1. install
@@ -185,27 +215,55 @@ bun install
 # 2. configure — create .env with your Ollama key
 #    OLLAMA_API_KEY=<your key>
 
-# 3. run the current smoke test
-bun run index.ts
+# 3. start the API + site
+bun run api-server.ts
+# → AIWithFlow listening on http://localhost:3000
 ```
 
-To exercise the scraper stub:
+Open <http://localhost:3000>, paste a share link, press **Get handoff**.
+
+Or call the API directly:
+
+```bash
+curl -X POST http://localhost:3000/api/handoff \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://chatgpt.com/share/<id>"}'
+```
+
+To exercise just the scraper, without the server, summarizer or UI:
 
 ```ts
 import scrape from './scrape.ts'
 
-const text = await scrape('https://example.com/share/abc123')
-console.log(text) // "Scraped content" — until the real implementation lands
+const messages = await scrape('https://claude.ai/share/<uuid>')
+console.log(messages) // [{ role: 'user', content: '…' }, …]
 ```
 
 ## Configuration
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `OLLAMA_API_KEY` | yes | Bearer token for the Ollama host. Read from `process.env` in `index.ts` |
-| `OLLAMA_HOST` | no | Override the model host. Currently hardcoded to `https://ollama.com` |
-| `SUMMARIZER_MODEL` | no | Model used for the handoff prompt. Currently hardcoded to `gemma4` |
-| `PORT` | no | HTTP server port once the API exists |
+| `OLLAMA_API_KEY` | yes | Bearer token for the Ollama host. Read from `process.env` in `index.ts` and `api-server.ts` |
+| `SUMMARIZER_MODEL` | no | Model used for the handoff prompt. Defaults to `gemma4` |
+| `PORT` | no | HTTP server port. Defaults to `3000` |
+| `OLLAMA_HOST` | no | Model host. Currently hardcoded to `https://ollama.com` |
+| `CHROME_PATH` | no | Override the Chrome/Edge binary used by `scrape_browser.ts` |
+
+Provider and deeplink configuration lives in `api.json`, not in environment variables:
+
+```jsonc
+{
+  "endpoints": { "handoff": "/api/handoff", "health": "/api/health" },
+  "sources":   { "chatgpt.com": { "name": "ChatGPT", "scrape": "browser" } },
+  "deeplinks": [{ "id": "claude", "name": "Claude", "url": "https://claude.ai/new?q={prompt}" }],
+  "copyPaste": [{ "id": "gemini", "name": "Gemini", "openUrl": "https://gemini.google.com/" }]
+}
+```
+
+`deeplinks` are the providers verified to accept a prefill parameter; `copyPaste` are
+the ones the [capability map](#verified-capability-map) marks as "no prefill param".
+Adding a target is a config edit, not a code change. `{prompt}` is always
+URI-encoded before substitution.
 
 `.env` is gitignored. If a key is ever pasted into a channel, a commit, or a
 screenshot, rotate it — treat it as burned.
@@ -215,6 +273,11 @@ screenshot, rotate it — treat it as burned.
 > been shared or synced anywhere.
 
 ## Architecture
+
+That's the *target* shape. The prototype that exists today is flat:
+`api-server.ts` (HTTP) → `scrape.ts` (router) → `scrape_browser.ts` (ChatGPT DOM) /
+Claude snapshot API → Ollama summarizer → response object built from `api.json`. The
+extraction into `src/` below is the step that keeps adding providers cheap.
 
 The pipeline maps cleanly onto modules; each stage is independently testable and the
 provider-specific parts are isolated behind a registry so adding a provider is one file.
@@ -478,34 +541,46 @@ formatting hints.
   itself becomes an injection relay that lends its domain's credibility to someone else's
   instruction.
 
-## Planned API surface
+## API surface
+
+Implemented today:
+
+```
+POST /api/handoff
+  body: { url: string }
+  -> 200 {
+       summary: string,          // one line, from packet.goal
+       messageCount: number,
+       options: [                // one flat list the UI renders in order
+         { mode: "deeplink", id, name, url, supportsPrefill: true  },
+         { mode: "other",    id, name, openUrl, supportsPrefill: false }
+       ],
+       prompt: string            // the full handoff payload for clipboard/URL
+     }
+  -> 400 { error: "url is required" }
+  -> 502 { error: "UNSUPPORTED_PROVIDER: example.com" | … }
+
+GET /api/health                -> { ok: true }
+GET /                          -> site/index.html
+GET /<file>                    -> site/<file>   (traversal-safe, 404 otherwise)
+```
+
+Planned additions, so the shape does not have to change later:
 
 ```
 POST /api/handoff
   body: { url: string, providers?: string[], model?: string }
-  -> 200 {
-       summary: string,
-       packet: HandoffPacket,
-       transcript: Message[],
-       options: [
-         // prefill-capable providers
-         { provider, name, mode: "deeplink", url, supportsPrefill: true, verified },
-         // no-prefill providers — the Other option
-         { provider, name, mode: "other",    openUrl, hints, supportsPrefill: false }
-       ],
-       copyPrompt: string,           // plain text, for the Other option
-       copyPromptMarkdown: string    // Markdown variant of the same payload
-     }
+  -> adds: packet: HandoffPacket, transcript: Message[],
+           copyPromptMarkdown: string, verified dates per option
 
 GET  /api/providers            -> capability map: mode, openUrl, hints, verified date
 GET  /api/packets/:id          -> cached packet (when sharing is enabled)
-GET  /healthz                  -> liveness
 ```
 
-`options` is the single list the UI renders, in order. Every entry is either a
-`deeplink` (prompt travels in the URL) or `other` (prompt travels via the clipboard); the
-client never has to decide which, and a provider flipping between the two is a server-side
-config change rather than a UI rewrite.
+`options` is the single list the UI renders. Every entry is either a `deeplink` (prompt
+travels in the URL) or `other` (prompt travels via the clipboard); the client never has
+to decide which, and a provider flipping between the two is an `api.json` change rather
+than a UI rewrite.
 
 Errors are explicit: `UNSUPPORTED_PROVIDER`, `PRIVATE_THREAD`, `FETCH_FAILED`,
 `PARSE_FAILED`, `MODEL_FAILED`, `PAYLOAD_TOO_LARGE`.
@@ -622,19 +697,18 @@ What follows for the implementation:
 
 ## Roadmap
 
-- [ ] **M1 — Parser.** Real `scrape()` for one provider, with fixtures and unit tests.
-- [ ] **M2 — Handoff packet.** `summarize.ts` with the schema above, validated by a
-      runtime schema check; golden-file tests on canned transcripts.
-- [ ] **M3 — Handoff options.** `deeplink.ts` + capability map with per-entry verified
-      dates, plus the **Other** option: text and Markdown clipboard payloads, `openUrl`
-      links for no-prefill providers, and `.md` download.
-- [ ] **M4 — HTTP API.** `Bun.serve` server implementing `/api/handoff`.
-- [ ] **M5 — Web UI.** Paste box, streaming summary, per-provider buttons, and the
-      Other / Copy & paste panel with copy confirmation and a textarea fallback.
-- [ ] **M6 — Multi-provider.** Claude, Perplexity, Grok, Google AI Mode; the Gemini app
-      itself has no prefill parameter, so AI Mode / AI Studio is the Gemini-shaped target,
-      and any provider without prefill routes to **Other** automatically.
-      Browser-render fallback for JS-heavy share pages.
+- [x] **M1 — Parser.** `scrape()` for Claude (snapshot API) and ChatGPT (browser DOM),
+      normalized to `{role, content}[]`. Fixtures and unit tests still missing.
+- [x] **M2 — Handoff packet.** Summarizer prompt in `api-server.ts` producing the schema
+      above, with a tolerant JSON extractor. Runtime schema validation still missing.
+- [x] **M3 — Handoff options.** Verified capability map with per-entry checked dates, plus
+      the **Other** option: clipboard payload and `openUrl` links for no-prefill providers.
+      Markdown payload and `.md` download still missing.
+- [x] **M4 — HTTP API.** `Bun.serve` server implementing `/api/handoff` and `/api/health`.
+- [x] **M5 — Web UI.** Paste box, summary, per-provider buttons, and the Other / Copy &
+      paste panel with copy confirmation and a textarea fallback.
+- [ ] **M6 — Multi-provider.** Perplexity, Grok, Google AI Mode as scrape *sources*
+      (they already work as deeplink *targets*). Per-provider fixtures.
 - [ ] **M7 — Local-only mode.** Paste transcript, no fetching, nothing leaves the
       machine beyond the model call.
 - [ ] **M8 — Compression.** Fit longer briefs into short URLs; drop `preparedPrompt`

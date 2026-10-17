@@ -1,6 +1,21 @@
+import { existsSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
 
-const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+const CHROME_CANDIDATES = [
+    process.env.CHROME_PATH,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+]
+
+function findBrowserPath(): string {
+    const found = CHROME_CANDIDATES.find((p) => p && existsSync(p))
+    if (!found) {
+        throw new Error('BROWSER_NOT_FOUND: set CHROME_PATH to a Chrome or Edge executable')
+    }
+    return found
+}
 
 export type BrowserMessage = {
     role: 'user' | 'assistant'
@@ -17,7 +32,7 @@ export type BrowserMessage = {
  */
 export default async function scrapeChatgptWithBrowser(url: string): Promise<BrowserMessage[]> {
     const browser = await puppeteer.launch({
-        executablePath: CHROME_PATH,
+        executablePath: findBrowserPath(),
         headless: 'new',
         args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
     })

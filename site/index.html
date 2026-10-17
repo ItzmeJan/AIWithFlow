@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AIWithFlow — Move your chat anywhere</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,6 +16,7 @@
       <input id="url" type="url" placeholder="https://chatgpt.com/share/…" required>
       <button type="submit">Get handoff</button>
     </form>
+    <p class="hint">Works with public ChatGPT and Claude share links.</p>
 
     <div id="loading" hidden>Reading the conversation…</div>
 
@@ -23,6 +25,7 @@
 
       <h2>Open in</h2>
       <div id="links" class="links"></div>
+      <p class="hint">Each button opens that app with the handoff already in the box — just press send.</p>
 
       <details id="other">
         <summary>Other / Copy &amp; paste</summary>

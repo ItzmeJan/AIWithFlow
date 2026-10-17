@@ -8,5 +8,8 @@
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "dependencies": {
+    "ollama": "^0.6.4"
   }
 }

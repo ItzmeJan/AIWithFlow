@@ -10,6 +10,7 @@
     "typescript": "^7"
   },
   "dependencies": {
-    "ollama": "^0.6.4"
+    "ollama": "^0.6.4",
+    "puppeteer-core": "^25.14.0"
   }
 }

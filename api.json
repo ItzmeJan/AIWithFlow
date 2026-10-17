@@ -1,0 +1,66 @@
+{
+  "$comment": "Config for aiwithflow-api. Sources are chat share-link hosts the server can scrape. Deeplinks prefill the prompt and wait for the user to send. Copy-paste providers have no known prefill param.",
+  "endpoints": {
+    "handoff": "/api/handoff",
+    "health": "/api/health"
+  },
+  "sources": {
+    "claude.ai": {
+      "name": "Claude",
+      "scrape": "api"
+    },
+    "chatgpt.com": {
+      "name": "ChatGPT",
+      "scrape": "browser"
+    }
+  },
+  "deeplinks": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "url": "https://claude.ai/new?q={prompt}"
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "url": "https://chatgpt.com/?q={prompt}"
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "url": "https://www.perplexity.ai/search/new?q={prompt}"
+    },
+    {
+      "id": "grok",
+      "name": "Grok",
+      "url": "https://x.com/i/grok?text={prompt}"
+    },
+    {
+      "id": "google-ai-mode",
+      "name": "Google AI Mode",
+      "url": "https://www.google.com/search?udm=50&aep=11&q={prompt}"
+    }
+  ],
+  "copyPaste": [
+    {
+      "id": "gemini",
+      "name": "Gemini",
+      "openUrl": "https://gemini.google.com/"
+    },
+    {
+      "id": "copilot",
+      "name": "Copilot",
+      "openUrl": "https://copilot.microsoft.com/"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "openUrl": "https://chat.deepseek.com/"
+    },
+    {
+      "id": "mistral",
+      "name": "Le Chat",
+      "openUrl": "https://chat.mistral.ai/"
+    }
+  ]
+}

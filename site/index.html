@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIWithFlow — Move your chat anywhere</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="card">
+    <h1>AIWithFlow</h1>
+    <p class="sub">Paste a chat share link. Continue it anywhere.</p>
+
+    <form id="form">
+      <input id="url" type="url" placeholder="https://chatgpt.com/share/…" required>
+      <button type="submit">Get handoff</button>
+    </form>
+
+    <div id="loading" hidden>Reading the conversation…</div>
+
+    <section id="results" hidden>
+      <div id="summary"></div>
+
+      <h2>Open in</h2>
+      <div id="links" class="links"></div>
+
+      <details id="other">
+        <summary>Other / Copy &amp; paste</summary>
+        <div id="other-body"></div>
+      </details>
+    </section>
+
+    <p id="error" class="error" hidden></p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
